@@ -75,11 +75,15 @@ MongoClient.connect('mongodb://localhost:27017/mongomart', function(err, db) {
 
                 items.getNumItems(category, function(itemCount) {
 
+                    // console.log("itemCount is ", itemCount);
+
                     var numPages = 0;
                     if (itemCount > ITEMS_PER_PAGE) {
                         numPages = Math.ceil(itemCount / ITEMS_PER_PAGE);
                     }
                 
+                    //console.log("home: ", category, itemCount);
+
                     res.render('home', { category_param: category,
                                          categories: categories,
                                          useRangeBasedPagination: false,
@@ -103,6 +107,8 @@ MongoClient.connect('mongodb://localhost:27017/mongomart', function(err, db) {
         items.searchItems(query, page, ITEMS_PER_PAGE, function(searchItems) {
 
             items.getNumSearchItems(query, function(itemCount) {
+
+                //console.log("/search", itemCount)
 
                 var numPages = 0;
                 

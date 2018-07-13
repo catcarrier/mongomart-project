@@ -24,7 +24,7 @@ function ItemDAO(database) {
 
     this.db = database;
 
-    this.getCategories = function(callback) {
+    this.getCategories = function (callback) {
         "use strict";
 
         /*
@@ -51,25 +51,44 @@ function ItemDAO(database) {
         * to the callback.
         *
         */
+        this.db.collection("item").aggregate([
+            {
+                $group: {
+                    _id: "$category",
+                    num: { $sum: 1 }
+                }
+            }
+            , {
+                $sort: {
+                    _id: 1
+                }
+            }
+        ], function (err, result) {
 
-        var categories = [];
-        var category = {
-            _id: "All",
-            num: 9999
-        };
+            if (err) { throw err; }
 
-        categories.push(category)
+            // Add the "all" category as the first elem, with num
+            // set to the sum of all categories in result. So if there are
+            // 219 itemsin all categories, All is {..., num:219}
+            var total = 0;
+            for (var idx = 0; idx < result.length; idx++) {
+                total += result[idx].num;
+            }
 
-        // TODO-lab1A Replace all code above (in this method).
+            var allCategory = {
+                _id: "All",
+                num: total
+            };
 
-        // TODO Include the following line in the appropriate
-        // place within your code to pass the categories array to the
-        // callback.
-        callback(categories);
+            result.unshift(allCategory);
+
+            callback(result);
+
+        }); // aggregate
     }
 
 
-    this.getItems = function(category, page, itemsPerPage, callback) {
+    this.getItems = function (category, page, itemsPerPage, callback) {
         "use strict";
 
         /*
@@ -93,26 +112,32 @@ function ItemDAO(database) {
          * than you do for other categories.
          *
          */
+        var operators = [];
 
-        var pageItem = this.createDummyItem();
-        var pageItems = [];
-        for (var i=0; i<5; i++) {
-            pageItems.push(pageItem);
+        if (category == "All") {
+            operators = [
+                { $sort: { _id: 1 } }
+                , { $skip: page * itemsPerPage }
+                , { $limit: itemsPerPage }
+            ];
+        } else {
+            operators = [
+                { $match: { category: category } }
+                , { $sort: { _id: 1 } }
+                , { $skip: page * itemsPerPage }
+                , { $limit: itemsPerPage }
+            ];
         }
 
-        // TODO-lab1B Replace all code above (in this method).
-
-        // TODO Include the following line in the appropriate
-        // place within your code to pass the items for the selected page
-        // to the callback.
-        callback(pageItems);
+        this.db.collection("item").aggregate(operators, function (err, result) {
+            if (err) { throw err }
+            callback(result);
+        });
     }
 
 
-    this.getNumItems = function(category, callback) {
+    this.getNumItems = function (category, callback) {
         "use strict";
-
-        var numItems = 0;
 
         /*
          * TODO-lab1C:
@@ -129,13 +154,39 @@ function ItemDAO(database) {
          *
          */
 
-         // TODO Include the following line in the appropriate
-         // place within your code to pass the count to the callback.
-        callback(numItems);
+        var operators = [];
+
+        // if category is "All" then we return a count of all products
+        if (category == "All") {
+            operators = [
+                {
+                    $group: {
+                        _id: null,
+                        count: { $sum: 1 }
+                    }
+                },
+                { $project: { _id: 0, count: 1 } }
+            ];
+        } else {
+            operators = [
+                { $match: { category: category } }
+                , {
+                    $group: {
+                        _id: null,
+                        count: { $sum: 1 }
+                    }
+                }
+                , { $project: { _id: 0, count: 1 } }
+            ];
+        }
+        this.db.collection("item").aggregate(operators, function (err, result) {
+            if (err) { throw err; }
+            callback( result.length ? result[0].count : 0);
+        });
     }
 
 
-    this.searchItems = function(query, page, itemsPerPage, callback) {
+    this.searchItems = function (query, page, itemsPerPage, callback) {
         "use strict";
 
         /*
@@ -161,26 +212,49 @@ function ItemDAO(database) {
          * description. You should simply do this in the mongo shell.
          *
          */
+        var operators = [
+            {$match: {$text: {$search: query}}},
+            {$sort: {_id:1}},
+            {$skip: page * itemsPerPage},
+            {$limit: itemsPerPage}
+        ];
+        this.db.collection("item").aggregate(operators, function(err, result){
+            if(err) { throw err }
+            callback(result);
+        });
 
-        var item = this.createDummyItem();
-        var items = [];
-        for (var i=0; i<5; i++) {
-            items.push(item);
-        }
+        // var item = this.createDummyItem();
+        // var items = [];
+        // for (var i = 0; i < 5; i++) {
+        //     items.push(item);
+        // }
 
         // TODO-lab2A Replace all code above (in this method).
 
         // TODO Include the following line in the appropriate
         // place within your code to pass the items for the selected page
         // of search results to the callback.
-        callback(items);
+        //callback(items);
     }
 
 
-    this.getNumSearchItems = function(query, callback) {
+    this.getNumSearchItems = function (query, callback) {
         "use strict";
 
         var numItems = 0;
+
+        var operators = [
+            {$match: {$text: {$search: query}}},
+            {$group: {
+              _id: null,
+              count: {$sum: 1}
+            }},
+            {$project: {_id:0, count:1}}
+        ];
+        this.db.collection("item").aggregate(operators, function(err, results){
+            if(err) { throw err }
+            callback( results.length ? results[0].count : 0);
+        })
 
         /*
         * TODO-lab2B
@@ -195,11 +269,11 @@ function ItemDAO(database) {
         * simply do this in the mongo shell.
         */
 
-        callback(numItems);
+        // callback(numItems);
     }
 
 
-    this.getItem = function(itemId, callback) {
+    this.getItem = function (itemId, callback) {
         "use strict";
 
         /*
@@ -223,19 +297,19 @@ function ItemDAO(database) {
     }
 
 
-    this.getRelatedItems = function(callback) {
+    this.getRelatedItems = function (callback) {
         "use strict";
 
         this.db.collection("item").find({})
             .limit(4)
-            .toArray(function(err, relatedItems) {
+            .toArray(function (err, relatedItems) {
                 assert.equal(null, err);
                 callback(relatedItems);
             });
     };
 
 
-    this.addReview = function(itemId, comment, name, stars, callback) {
+    this.addReview = function (itemId, comment, name, stars, callback) {
         "use strict";
 
         /*
@@ -269,7 +343,7 @@ function ItemDAO(database) {
     }
 
 
-    this.createDummyItem = function() {
+    this.createDummyItem = function () {
         "use strict";
 
         var item = {
